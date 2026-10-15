@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA Test & Defect Tracker | Full-Stack Python & SQLite</title>
+  <meta name="description" content="Professional full-stack QA test case and bug tracker powered by Python Flask REST API and SQLite database.">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+
+  <!-- Site Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <span class="brand-icon">⚡</span>
+        <div>
+          <h1 class="brand-title">QATracker<span class="brand-badge">Full-Stack</span></h1>
+          <span class="brand-subtitle">Python 3 + Flask + SQLite REST API</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Live API status indicator -->
+        <div class="api-status-badge" id="api-status">
+          <span class="status-dot"></span>
+          <span id="api-status-text">Connecting to Backend...</span>
+        </div>
+
+        <!-- Dark/Light Theme Toggle -->
+        <button id="theme-toggle" class="icon-btn" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
+          <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="container">
+
+      <!-- KPI Metrics Strip -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-label">Total Test Cases</span>
+          <span class="kpi-value" id="kpi-total">-</span>
+          <span class="kpi-hint">Stored in SQLite</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Pass Rate</span>
+          <span class="kpi-value success" id="kpi-pass-rate">-%</span>
+          <span class="kpi-hint"><span id="kpi-passed">-</span> Passed</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Active Defects</span>
+          <span class="kpi-value warning" id="kpi-defects">-</span>
+          <span class="kpi-hint"><span id="kpi-critical">-</span> Critical / Blocker</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Automation Coverage</span>
+          <span class="kpi-value primary" id="kpi-auto-rate">-%</span>
+          <span class="kpi-hint">Playwright / Cypress / API</span>
+        </div>
+      </section>
+
+      <!-- View Navigation Tabs -->
+      <div class="view-tabs-bar">
+        <div class="view-tabs" role="tablist">
+          <button class="view-tab active" data-view="tests">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+            Test Cases (<span id="tab-count-tests">0</span>)
+          </button>
+          <button class="view-tab" data-view="defects">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+            Defects / Bug Tracker (<span id="tab-count-defects">0</span>)
+          </button>
+          <button class="view-tab" data-view="api">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+            Live REST API Explorer
+          </button>
+        </div>
+
+        <div class="action-buttons">
+          <button id="open-new-test-btn" class="btn btn-primary">
+            <span>+ New Test Case</span>
+          </button>
+          <button id="open-new-defect-btn" class="btn btn-danger">
+            <span>+ Log Defect</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- VIEW 1: Test Cases Suite -->
+      <section id="view-tests" class="view-section active">
+        <!-- Controls: Search & Module Filters -->
+        <div class="filter-controls">
+          <div class="search-box">
+            <input type="text" id="test-search-input" placeholder="Search test cases by title or description...">
+          </div>
+          <div class="select-filters">
+            <select id="filter-status-select" aria-label="Filter by Status">
+              <option value="">All Statuses</option>
+              <option value="Passed">Passed</option>
+              <option value="Failed">Failed</option>
+              <option value="Pending">Pending</option>
+              <option value="Blocked">Blocked</option>
+            </select>
+            <select id="filter-module-select" aria-label="Filter by Module">
+              <option value="">All Modules</option>
+              <option value="Auth & Security">Auth & Security</option>
+              <option value="Fintech & Payments">Fintech & Payments</option>
+              <option value="REST API">REST API</option>
+              <option value="Mobile App">Mobile App</option>
+              <option value="Performance">Performance</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Test Cases Grid -->
+        <div class="test-cards-grid" id="test-cards-container">
+          <!-- Dynamically populated from /api/testcases -->
+          <div class="loading-spinner">Loading test cases from backend...</div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: Defects / Bug Tracker -->
+      <section id="view-defects" class="view-section">
+        <div class="defects-container" id="defects-container">
+          <!-- Dynamically populated from /api/defects -->
+          <div class="loading-spinner">Loading defects from backend...</div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: Interactive REST API Explorer -->
+      <section id="view-api" class="view-section">
+        <div class="api-explorer-card">
+          <div class="api-explorer-header">
+            <h3>Interactive REST API Console</h3>
+            <p>Send live HTTP requests directly from your browser to the Python Flask backend and inspect JSON payloads.</p>
+          </div>
+
+          <div class="api-request-bar">
+            <select id="api-method-select">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+            <input type="text" id="api-endpoint-input" value="/api/stats">
+            <button id="api-send-btn" class="btn btn-primary">Send Request</button>
+          </div>
+
+          <div class="api-presets">
+            <span class="preset-label">Quick Endpoints:</span>
+            <button class="preset-btn" data-method="GET" data-endpoint="/api/health">GET /api/health</button>
+            <button class="preset-btn" data-method="GET" data-endpoint="/api/stats">GET /api/stats</button>
+            <button class="preset-btn" data-method="GET" data-endpoint="/api/testcases">GET /api/testcases</button>
+            <button class="preset-btn" data-method="GET" data-endpoint="/api/defects">GET /api/defects</button>
+          </div>
+
+          <div class="api-response-window">
+            <div class="response-header">
+              <span>HTTP Response</span>
+              <span id="response-status-badge" class="response-status">-</span>
+            </div>
+            <pre class="response-body"><code id="api-response-code">// Click "Send Request" to test this endpoint live...</code></pre>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Modal: New Test Case -->
+  <div class="modal-overlay" id="modal-new-test" aria-hidden="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create New Test Case</h3>
+        <button class="modal-close-btn" data-close="modal-new-test">&times;</button>
+      </div>
+      <form id="form-new-test">
+        <div class="form-group">
+          <label for="new-test-title">Title <span class="required">*</span></label>
+          <input type="text" id="new-test-title" required placeholder="e.g. POST /v1/checkout: Stripe Currency Conversion">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-test-module">Module <span class="required">*</span></label>
+            <input type="text" id="new-test-module" required placeholder="e.g. Fintech & Payments">
+          </div>
+          <div class="form-group">
+            <label for="new-test-priority">Priority</label>
+            <select id="new-test-priority">
+              <option value="Critical">Critical</option>
+              <option value="High" selected>High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-test-tool">Automation Tool</label>
+            <select id="new-test-tool">
+              <option value="Playwright" selected>Playwright (Python)</option>
+              <option value="Cypress">Cypress (JavaScript)</option>
+              <option value="Postman">Postman (REST API)</option>
+              <option value="Appium">Appium (Mobile)</option>
+              <option value="Selenium">Selenium (Java)</option>
+              <option value="Manual">Manual Testing</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-test-status">Initial Status</label>
+            <select id="new-test-status">
+              <option value="Pending" selected>Pending</option>
+              <option value="Passed">Passed</option>
+              <option value="Failed">Failed</option>
+              <option value="Blocked">Blocked</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="new-test-desc">Description / Test Steps</label>
+          <textarea id="new-test-desc" rows="3" placeholder="Describe the assertions and expected outcomes..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modal-new-test">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to Database</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Log Defect -->
+  <div class="modal-overlay" id="modal-new-defect" aria-hidden="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Report Defect / Bug</h3>
+        <button class="modal-close-btn" data-close="modal-new-defect">&times;</button>
+      </div>
+      <form id="form-new-defect">
+        <div class="form-group">
+          <label for="new-defect-title">Bug Summary <span class="required">*</span></label>
+          <input type="text" id="new-defect-title" required placeholder="e.g. Stripe checkout fails with 400 when amount contains fractions">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="new-defect-test-id">Linked Test Case</label>
+            <select id="new-defect-test-id">
+              <option value="">-- Standalone (No Test Case) --</option>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-defect-severity">Severity</label>
+            <select id="new-defect-severity">
+              <option value="Blocker">Blocker</option>
+              <option value="Critical">Critical</option>
+              <option value="Major" selected>Major</option>
+              <option value="Minor">Minor</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="new-defect-steps">Steps to Reproduce</label>
+          <textarea id="new-defect-steps" rows="4" placeholder="1. Go to checkout&#10;2. Submit card payment&#10;3. Observe error response..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modal-new-defect">Cancel</button>
+          <button type="submit" class="btn btn-danger">Log Defect</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Main JavaScript App -->
+  <script src="static/js/app.js"></script>
+</body>
+</html>

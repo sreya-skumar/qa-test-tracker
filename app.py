@@ -1,0 +1,401 @@
+"""
+QA Test Case & Bug Tracker - Flask REST API Backend
+Provides RESTful endpoints for test case management, defect tracking, and KPI metrics.
+"""
+
+import os
+import time
+from flask import Flask, request, jsonify, send_from_directory
+from database import get_db, init_db
+
+app = Flask(__name__, static_folder='static')
+SERVER_START_TIME = time.time()
+
+# --------------------------------------------------------------------------
+# Security Headers Middleware
+# --------------------------------------------------------------------------
+@app.after_request
+def apply_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    return response
+
+# --------------------------------------------------------------------------
+# Frontend Route
+# --------------------------------------------------------------------------
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+# --------------------------------------------------------------------------
+# API: Health & KPI Statistics
+# --------------------------------------------------------------------------
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Returns backend health status, database ping, and server uptime."""
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1")
+        conn.close()
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    uptime_seconds = int(time.time() - SERVER_START_TIME)
+
+    return jsonify({
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "uptime_seconds": uptime_seconds,
+        "framework": "Flask / Python 3",
+        "version": "1.0.0"
+    }), 200
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Computes real-time QA metrics and test pass rates."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'Passed' THEN 1 ELSE 0 END) AS passed,
+        SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN status = 'Blocked' THEN 1 ELSE 0 END) AS blocked,
+        SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN automated_by != 'Manual' THEN 1 ELSE 0 END) AS automated
+    FROM test_cases;
+    """)
+    test_metrics = dict(cursor.fetchone())
+
+    cursor.execute("""
+    SELECT
+        COUNT(*) AS total_defects,
+        SUM(CASE WHEN status IN ('Open', 'In Progress') THEN 1 ELSE 0 END) AS open_defects,
+        SUM(CASE WHEN severity = 'Critical' OR severity = 'Blocker' THEN 1 ELSE 0 END) AS critical_defects
+    FROM defects;
+    """)
+    defect_metrics = dict(cursor.fetchone())
+
+    conn.close()
+
+    total = test_metrics['total'] or 0
+    passed = test_metrics['passed'] or 0
+    automated = test_metrics['automated'] or 0
+    pass_rate = round((passed / total * 100), 1) if total > 0 else 0
+    automation_rate = round((automated / total * 100), 1) if total > 0 else 0
+
+    return jsonify({
+        "total_test_cases": total,
+        "passed": passed,
+        "failed": test_metrics['failed'] or 0,
+        "blocked": test_metrics['blocked'] or 0,
+        "pending": test_metrics['pending'] or 0,
+        "pass_rate_percent": pass_rate,
+        "automation_rate_percent": automation_rate,
+        "total_defects": defect_metrics['total_defects'] or 0,
+        "open_defects": defect_metrics['open_defects'] or 0,
+        "critical_defects": defect_metrics['critical_defects'] or 0
+    }), 200
+
+# --------------------------------------------------------------------------
+# API: Test Cases CRUD
+# --------------------------------------------------------------------------
+@app.route('/api/testcases', methods=['GET'])
+def list_test_cases():
+    """Lists test cases with optional filters for status, module, and priority."""
+    status_filter = request.args.get('status')
+    module_filter = request.args.get('module')
+    priority_filter = request.args.get('priority')
+
+    query = "SELECT * FROM test_cases WHERE 1=1"
+    params = []
+
+    if status_filter:
+        query += " AND status = ?"
+        params.append(status_filter)
+    if module_filter:
+        query += " AND module = ?"
+        params.append(module_filter)
+    if priority_filter:
+        query += " AND priority = ?"
+        params.append(priority_filter)
+
+    query += " ORDER BY id DESC"
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({"count": len(rows), "test_cases": rows}), 200
+
+@app.route('/api/testcases', methods=['POST'])
+def create_test_case():
+    """Creates a new test case with input validation."""
+    data = request.get_json() or {}
+
+    title = (data.get('title') or '').strip()
+    module = (data.get('module') or '').strip()
+    priority = data.get('priority') or 'Medium'
+    status = data.get('status') or 'Pending'
+    automated_by = data.get('automated_by') or 'Playwright'
+    description = (data.get('description') or '').strip()
+
+    # Validation
+    if not title:
+        return jsonify({"error": "Title is required"}), 400
+    if not module:
+        return jsonify({"error": "Module is required"}), 400
+    if priority not in ('Critical', 'High', 'Medium', 'Low'):
+        return jsonify({"error": "Invalid priority level"}), 400
+    if status not in ('Passed', 'Failed', 'Pending', 'Blocked'):
+        return jsonify({"error": "Invalid status value"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO test_cases (title, description, module, priority, status, automated_by)
+    VALUES (?, ?, ?, ?, ?, ?);
+    """, (title, description, module, priority, status, automated_by))
+    new_id = cursor.lastrowid
+    conn.commit()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (new_id,))
+    new_test = dict(cursor.fetchone())
+    conn.close()
+
+    return jsonify({"message": "Test case created successfully", "test_case": new_test}), 201
+
+@app.route('/api/testcases/<int:case_id>', methods=['GET'])
+def get_test_case(case_id):
+    """Retrieves a single test case along with any linked defects."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    test_row = cursor.fetchone()
+    if not test_row:
+        conn.close()
+        return jsonify({"error": f"Test case #{case_id} not found"}), 404
+
+    test_data = dict(test_row)
+
+    cursor.execute("SELECT * FROM defects WHERE test_case_id = ? ORDER BY id DESC", (case_id,))
+    defects = [dict(r) for r in cursor.fetchall()]
+    test_data['defects'] = defects
+
+    conn.close()
+    return jsonify({"test_case": test_data}), 200
+
+@app.route('/api/testcases/<int:case_id>', methods=['PUT'])
+def update_test_case(case_id):
+    """Updates test case fields."""
+    data = request.get_json() or {}
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": f"Test case #{case_id} not found"}), 404
+
+    title = data.get('title', existing['title'])
+    description = data.get('description', existing['description'])
+    module = data.get('module', existing['module'])
+    priority = data.get('priority', existing['priority'])
+    status = data.get('status', existing['status'])
+    automated_by = data.get('automated_by', existing['automated_by'])
+
+    cursor.execute("""
+    UPDATE test_cases
+    SET title = ?, description = ?, module = ?, priority = ?, status = ?, automated_by = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?;
+    """, (title, description, module, priority, status, automated_by, case_id))
+    conn.commit()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    updated_test = dict(cursor.fetchone())
+    conn.close()
+
+    return jsonify({"message": "Test case updated", "test_case": updated_test}), 200
+
+@app.route('/api/testcases/<int:case_id>/status', methods=['POST'])
+def update_test_status(case_id):
+    """Quickly toggles/updates test execution status and execution time."""
+    data = request.get_json() or {}
+    new_status = data.get('status')
+    execution_time = data.get('execution_time_ms', 0)
+
+    if new_status not in ('Passed', 'Failed', 'Pending', 'Blocked'):
+        return jsonify({"error": "Invalid status value"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({"error": f"Test case #{case_id} not found"}), 404
+
+    cursor.execute("""
+    UPDATE test_cases
+    SET status = ?, execution_time_ms = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?;
+    """, (new_status, execution_time, case_id))
+    conn.commit()
+
+    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    updated = dict(cursor.fetchone())
+    conn.close()
+
+    return jsonify({"message": "Test status updated", "test_case": updated}), 200
+
+@app.route('/api/testcases/<int:case_id>', methods=['DELETE'])
+def delete_test_case(case_id):
+    """Deletes a test case."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM test_cases WHERE id = ?", (case_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({"error": f"Test case #{case_id} not found"}), 404
+
+    cursor.execute("DELETE FROM test_cases WHERE id = ?", (case_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"Test case #{case_id} deleted successfully"}), 200
+
+# --------------------------------------------------------------------------
+# API: Defects / Bug Tracker CRUD
+# --------------------------------------------------------------------------
+@app.route('/api/defects', methods=['GET'])
+def list_defects():
+    """Lists defects joined with their test case title."""
+    status_filter = request.args.get('status')
+    severity_filter = request.args.get('severity')
+
+    query = """
+    SELECT d.*, t.title AS test_case_title, t.module AS test_case_module
+    FROM defects d
+    LEFT JOIN test_cases t ON d.test_case_id = t.id
+    WHERE 1=1
+    """
+    params = []
+
+    if status_filter:
+        query += " AND d.status = ?"
+        params.append(status_filter)
+    if severity_filter:
+        query += " AND d.severity = ?"
+        params.append(severity_filter)
+
+    query += " ORDER BY d.id DESC"
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    defects = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({"count": len(defects), "defects": defects}), 200
+
+@app.route('/api/defects', methods=['POST'])
+def create_defect():
+    """Logs a new defect/bug."""
+    data = request.get_json() or {}
+
+    title = (data.get('title') or '').strip()
+    severity = data.get('severity') or 'Major'
+    status = data.get('status') or 'Open'
+    test_case_id = data.get('test_case_id')
+    steps = (data.get('steps_to_reproduce') or '').strip()
+
+    if not title:
+        return jsonify({"error": "Defect title is required"}), 400
+    if severity not in ('Blocker', 'Critical', 'Major', 'Minor'):
+        return jsonify({"error": "Invalid severity level"}), 400
+    if status not in ('Open', 'In Progress', 'Resolved', 'Closed'):
+        return jsonify({"error": "Invalid status value"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO defects (test_case_id, title, severity, status, steps_to_reproduce)
+    VALUES (?, ?, ?, ?, ?);
+    """, (test_case_id, title, severity, status, steps))
+    new_id = cursor.lastrowid
+    conn.commit()
+
+    cursor.execute("SELECT * FROM defects WHERE id = ?", (new_id,))
+    new_defect = dict(cursor.fetchone())
+    conn.close()
+
+    return jsonify({"message": "Defect logged successfully", "defect": new_defect}), 201
+
+@app.route('/api/defects/<int:defect_id>', methods=['PUT'])
+def update_defect(defect_id):
+    """Updates defect status or severity."""
+    data = request.get_json() or {}
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM defects WHERE id = ?", (defect_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": f"Defect #{defect_id} not found"}), 404
+
+    title = data.get('title', existing['title'])
+    severity = data.get('severity', existing['severity'])
+    status = data.get('status', existing['status'])
+    steps = data.get('steps_to_reproduce', existing['steps_to_reproduce'])
+
+    cursor.execute("""
+    UPDATE defects
+    SET title = ?, severity = ?, status = ?, steps_to_reproduce = ?
+    WHERE id = ?;
+    """, (title, severity, status, steps, defect_id))
+    conn.commit()
+
+    cursor.execute("SELECT * FROM defects WHERE id = ?", (defect_id,))
+    updated = dict(cursor.fetchone())
+    conn.close()
+
+    return jsonify({"message": "Defect updated", "defect": updated}), 200
+
+@app.route('/api/defects/<int:defect_id>', methods=['DELETE'])
+def delete_defect(defect_id):
+    """Deletes a defect."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM defects WHERE id = ?", (defect_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return jsonify({"error": f"Defect #{defect_id} not found"}), 404
+
+    cursor.execute("DELETE FROM defects WHERE id = ?", (defect_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"Defect #{defect_id} deleted successfully"}), 200
+
+# --------------------------------------------------------------------------
+# Main Entry Point
+# --------------------------------------------------------------------------
+if __name__ == '__main__':
+    # Initialize SQLite database and seed initial test records
+    init_db()
+    port = int(os.environ.get('PORT', 5050))
+    print(f"\n🚀 QA Test & Defect Tracker Backend starting on http://localhost:{port}\n")
+    app.run(host='0.0.0.0', port=port, debug=True)
