@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Check if redirected after sign-out
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('logged_out') === '1') {
+    showAlert('You have been signed out successfully.', 'success');
+  }
+
   // -------------------------------------------------------------------------
   // 2. Tab Switching (Sign In / Create Account)
   // -------------------------------------------------------------------------

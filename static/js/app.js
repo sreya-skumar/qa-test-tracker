@@ -544,9 +544,10 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLogout.addEventListener('click', async () => {
       try {
         await fetch('/api/auth/logout', { method: 'POST' });
-        showToast('Signed out successfully', 'success');
-        if (btnLoginNav) btnLoginNav.style.display = 'inline-flex';
-        if (userProfileBadge) userProfileBadge.style.display = 'none';
+        showToast('Signed out successfully. Redirecting...', 'success');
+        setTimeout(() => {
+          window.location.href = '/login?logged_out=1';
+        }, 300);
       } catch (err) {
         showToast('Error signing out', 'error');
       }
