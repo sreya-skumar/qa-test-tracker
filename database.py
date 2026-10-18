@@ -5,6 +5,7 @@ Manages SQLite database connections, schema setup, and seed data.
 
 import sqlite3
 import os
+from werkzeug.security import generate_password_hash
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_tracker.db')
 
@@ -50,10 +51,24 @@ def init_db():
     );
     """)
 
+    # Table 3: Users
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'QA Engineer',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
     # Indexes for fast querying
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_status ON test_cases(status);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_test_module ON test_cases(module);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_defect_status ON defects(status);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
 
     conn.commit()
 
@@ -61,6 +76,12 @@ def init_db():
     cursor.execute("SELECT COUNT(*) AS count FROM test_cases")
     if cursor.fetchone()['count'] == 0:
         seed_data(cursor)
+        conn.commit()
+
+    # Seed users if users table is empty
+    cursor.execute("SELECT COUNT(*) AS count FROM users")
+    if cursor.fetchone()['count'] == 0:
+        seed_users(cursor)
         conn.commit()
 
     conn.close()
@@ -168,3 +189,28 @@ def seed_data(cursor):
     INSERT INTO defects (test_case_id, title, severity, status, steps_to_reproduce)
     VALUES (?, ?, ?, ?, ?);
     """, sample_defects)
+
+def seed_users(cursor):
+    """Seeds default demo users with securely hashed passwords."""
+    default_password_hash = generate_password_hash("Password123!")
+
+    sample_users = [
+        (
+            "sreya",
+            "sreyamp14@gmail.com",
+            default_password_hash,
+            "Lead QA Automation Engineer"
+        ),
+        (
+            "alex",
+            "alex@example.com",
+            default_password_hash,
+            "QA Automation Tester"
+        )
+    ]
+
+    cursor.executemany("""
+    INSERT INTO users (username, email, password_hash, role)
+    VALUES (?, ?, ?, ?);
+    """, sample_users)
+

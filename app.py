@@ -5,10 +5,14 @@ Provides RESTful endpoints for test case management, defect tracking, and KPI me
 
 import os
 import time
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
+from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, init_db
 
 app = Flask(__name__, static_folder='static')
+app.secret_key = os.environ.get('SECRET_KEY', 'qa-tracker-secret-session-key-dev-2026')
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 SERVER_START_TIME = time.time()
 
 # --------------------------------------------------------------------------
@@ -23,11 +27,15 @@ def apply_security_headers(response):
     return response
 
 # --------------------------------------------------------------------------
-# Frontend Route
+# Frontend Routes
 # --------------------------------------------------------------------------
 @app.route('/')
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/login')
+def serve_login():
+    return send_from_directory(app.static_folder, 'login.html')
 
 # --------------------------------------------------------------------------
 # API: Health & KPI Statistics
@@ -100,6 +108,117 @@ def get_stats():
         "open_defects": defect_metrics['open_defects'] or 0,
         "critical_defects": defect_metrics['critical_defects'] or 0
     }), 200
+
+# --------------------------------------------------------------------------
+# API: Authentication & User Management
+# --------------------------------------------------------------------------
+@app.route('/api/auth/me', methods=['GET'])
+def get_current_user():
+    """Returns currently authenticated user session or unauthenticated status."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"authenticated": False, "user": None}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, email, role, created_at FROM users WHERE id = ?", (user_id,))
+    user_row = cursor.fetchone()
+    conn.close()
+
+    if not user_row:
+        session.clear()
+        return jsonify({"authenticated": False, "user": None}), 200
+
+    return jsonify({"authenticated": True, "user": dict(user_row)}), 200
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Authenticates user via username or email and password."""
+    data = request.get_json() or {}
+    login_identifier = (data.get('login') or '').strip().lower()
+    password = data.get('password') or ''
+
+    if not login_identifier or not password:
+        return jsonify({"error": "Please provide both username/email and password"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT * FROM users
+    WHERE LOWER(username) = ? OR LOWER(email) = ?;
+    """, (login_identifier, login_identifier))
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user or not check_password_hash(user['password_hash'], password):
+        return jsonify({"error": "Invalid username/email or password"}), 401
+
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+
+    user_data = {
+        "id": user['id'],
+        "username": user['username'],
+        "email": user['email'],
+        "role": user['role']
+    }
+
+    return jsonify({
+        "message": f"Welcome back, {user['username']}!",
+        "user": user_data
+    }), 200
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Registers a new user account with secure password hashing."""
+    data = request.get_json() or {}
+    username = (data.get('username') or '').strip()
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    role = data.get('role') or 'QA Engineer'
+
+    if not username or len(username) < 3:
+        return jsonify({"error": "Username must be at least 3 characters"}), 400
+    if not email or '@' not in email:
+        return jsonify({"error": "Please provide a valid email address"}), 400
+    if not password or len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check if username or email already exists
+    cursor.execute("SELECT id FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?", (username.lower(), email))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({"error": "Username or email is already registered"}), 409
+
+    password_hash = generate_password_hash(password)
+
+    cursor.execute("""
+    INSERT INTO users (username, email, password_hash, role)
+    VALUES (?, ?, ?, ?);
+    """, (username, email, password_hash, role))
+    new_user_id = cursor.lastrowid
+    conn.commit()
+
+    cursor.execute("SELECT id, username, email, role FROM users WHERE id = ?", (new_user_id,))
+    new_user = dict(cursor.fetchone())
+    conn.close()
+
+    session['user_id'] = new_user['id']
+    session['username'] = new_user['username']
+
+    return jsonify({
+        "message": "Account created successfully",
+        "user": new_user
+    }), 201
+
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """Logs out current user and clears session."""
+    session.clear()
+    return jsonify({"message": "Successfully logged out"}), 200
 
 # --------------------------------------------------------------------------
 # API: Test Cases CRUD

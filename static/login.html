@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | QATracker Full-Stack</title>
+  <meta name="description" content="Sign in to QATracker to manage test cases, log defects, and track automated test suites.">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/style.css">
+  <link rel="stylesheet" href="static/css/login.css">
+</head>
+<body class="login-body">
+
+  <!-- Background decorative glow orbs -->
+  <div class="login-glow orb-1" aria-hidden="true"></div>
+  <div class="login-glow orb-2" aria-hidden="true"></div>
+
+  <!-- Header minimal -->
+  <header class="login-header">
+    <a href="/" class="brand">
+      <span class="brand-icon">⚡</span>
+      <div>
+        <h1 class="brand-title">QATracker<span class="brand-badge">Full-Stack</span></h1>
+        <span class="brand-subtitle">Python 3 + Flask + SQLite REST API</span>
+      </div>
+    </a>
+
+    <div class="header-actions">
+      <!-- Dark/Light Theme Toggle -->
+      <button id="theme-toggle" class="icon-btn" aria-label="Toggle Theme" title="Toggle Dark/Light Mode">
+        <svg class="sun-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Login Card Container -->
+  <main class="login-main">
+    <div class="login-card">
+      
+      <!-- Card Header -->
+      <div class="login-card-header">
+        <div class="auth-tabs" role="tablist">
+          <button id="tab-login" class="auth-tab active" role="tab" aria-selected="true">Sign In</button>
+          <button id="tab-register" class="auth-tab" role="tab" aria-selected="false">Create Account</button>
+        </div>
+      </div>
+
+      <!-- Alert Box -->
+      <div id="auth-alert" class="auth-alert" role="alert" style="display: none;"></div>
+
+      <!-- Form 1: Sign In -->
+      <form id="form-login" class="auth-form active">
+        <div class="form-group">
+          <label for="login-identifier">Username or Email</label>
+          <input type="text" id="login-identifier" required placeholder="sreya or sreyamp14@gmail.com" autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label for="login-password">Password</label>
+          </div>
+          <div class="password-input-wrapper">
+            <input type="password" id="login-password" required placeholder="Enter your password" autocomplete="current-password">
+            <button type="button" class="toggle-password-btn" title="Show/Hide Password" aria-label="Toggle password visibility">
+              <svg class="eye-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block">
+          <span>Sign In to Dashboard</span>
+          <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+            <path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        <!-- Quick Demo Credentials Box -->
+        <div class="demo-box">
+          <span class="demo-title">⚡ Quick 1-Click Demo Login</span>
+          <div class="demo-buttons">
+            <button type="button" class="demo-btn" id="demo-btn-sreya">
+              <strong>Sreya (Lead QA)</strong>
+              <span>User: sreya • Pass: Password123!</span>
+            </button>
+            <button type="button" class="demo-btn" id="demo-btn-alex">
+              <strong>Alex (QA Tester)</strong>
+              <span>User: alex • Pass: Password123!</span>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Form 2: Register -->
+      <form id="form-register" class="auth-form">
+        <div class="form-group">
+          <label for="reg-username">Username <span class="required">*</span></label>
+          <input type="text" id="reg-username" required placeholder="e.g. jdoe" autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label for="reg-email">Email Address <span class="required">*</span></label>
+          <input type="email" id="reg-email" required placeholder="e.g. jdoe@company.com" autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label for="reg-role">Role</label>
+          <select id="reg-role">
+            <option value="Lead QA Automation Engineer">Lead QA Automation Engineer</option>
+            <option value="QA Engineer" selected>QA Engineer</option>
+            <option value="QA Tester">QA Tester</option>
+            <option value="Frontend Developer">Frontend Developer</option>
+            <option value="Backend Developer">Backend Developer</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-password">Password <span class="required">*</span> (min. 6 chars)</label>
+          <input type="password" id="reg-password" required placeholder="Choose a secure password" autocomplete="new-password">
+        </div>
+
+        <button type="submit" id="btn-submit-register" class="btn btn-primary btn-block">
+          <span>Create Account</span>
+        </button>
+      </form>
+
+      <!-- Footer navigation -->
+      <div class="login-card-footer">
+        <a href="/" class="guest-link">
+          <span>Continue as Guest to Dashboard</span>
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+          </svg>
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="static/js/login.js"></script>
+</body>
+</html>

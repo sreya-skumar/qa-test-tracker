@@ -53,6 +53,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const responseStatusBadge = document.getElementById('response-status-badge');
   const presetBtns = document.querySelectorAll('.preset-btn');
 
+  // Auth elements
+  const btnLoginNav = document.getElementById('btn-login-nav');
+  const userProfileBadge = document.getElementById('user-profile-badge');
+  const userAvatarInitials = document.getElementById('user-avatar-initials');
+  const userDisplayName = document.getElementById('user-display-name');
+  const userDisplayRole = document.getElementById('user-display-role');
+  const btnLogout = document.getElementById('btn-logout');
+
   // -------------------------------------------------------------------------
   // 1. Theme Management (Dark/Light with localStorage)
   // -------------------------------------------------------------------------
@@ -508,9 +516,48 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // -------------------------------------------------------------------------
-  // 10. Initial Application Boot
+  // 10. User Authentication State
+  // -------------------------------------------------------------------------
+  async function checkAuth() {
+    try {
+      const res = await fetch('/api/auth/me');
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        if (btnLoginNav) btnLoginNav.style.display = 'none';
+        if (userProfileBadge) {
+          userProfileBadge.style.display = 'flex';
+          const name = data.user.username || 'User';
+          if (userDisplayName) userDisplayName.textContent = name;
+          if (userDisplayRole) userDisplayRole.textContent = data.user.role || 'QA Member';
+          if (userAvatarInitials) userAvatarInitials.textContent = name.charAt(0).toUpperCase();
+        }
+      } else {
+        if (btnLoginNav) btnLoginNav.style.display = 'inline-flex';
+        if (userProfileBadge) userProfileBadge.style.display = 'none';
+      }
+    } catch (err) {
+      console.warn('Auth check failed:', err);
+    }
+  }
+
+  if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        showToast('Signed out successfully', 'success');
+        if (btnLoginNav) btnLoginNav.style.display = 'inline-flex';
+        if (userProfileBadge) userProfileBadge.style.display = 'none';
+      } catch (err) {
+        showToast('Error signing out', 'error');
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 11. Initial Application Boot
   // -------------------------------------------------------------------------
   checkHealth();
+  checkAuth();
   fetchStats();
   fetchTestCases();
   fetchDefects();
