@@ -7,6 +7,7 @@ import unittest
 import json
 import os
 import sys
+import time
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -159,9 +160,12 @@ class TestTrackerAPITestCase(unittest.TestCase):
 
     def test_10_register_user(self):
         """Asserts creating a new QA account returns HTTP 201 Created."""
+        unique_id = int(time.time() * 1000)
+        username = f"emma_{unique_id}"
+        email = f"emma_{unique_id}@testco.io"
         payload = {
-            "username": "emma_tester",
-            "email": "emma@testco.io",
+            "username": username,
+            "email": email,
             "password": "SecurePassword99!",
             "role": "QA Automation Tester"
         }
@@ -173,7 +177,7 @@ class TestTrackerAPITestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         data = json.loads(response.data)
         self.assertIn('user', data)
-        self.assertEqual(data['user']['username'], 'emma_tester')
+        self.assertEqual(data['user']['username'], username)
 
     def test_11_auth_me_and_logout(self):
         """Asserts /api/auth/me returns session state and logout clears it."""
