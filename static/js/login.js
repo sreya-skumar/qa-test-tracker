@@ -177,13 +177,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 6. Quick 1-Click Demo Logins
+  // 6. Autofill Demo Credentials (User clicks 'Log In' button to enter)
   // -------------------------------------------------------------------------
   if (demoBtnSreya) {
     demoBtnSreya.addEventListener('click', () => {
       loginIdentifier.value = 'sreya';
       loginPassword.value = 'Password123!';
-      formLogin.dispatchEvent(new Event('submit'));
+      btnSubmitLogin.focus();
+      showAlert('Demo credentials filled for Sreya! Click the "Log In" button below to enter the dashboard.', 'success');
     });
   }
 
@@ -191,7 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
     demoBtnAlex.addEventListener('click', () => {
       loginIdentifier.value = 'alex';
       loginPassword.value = 'Password123!';
-      formLogin.dispatchEvent(new Event('submit'));
+      btnSubmitLogin.focus();
+      showAlert('Demo credentials filled for Alex! Click the "Log In" button below to enter the dashboard.', 'success');
     });
   }
 

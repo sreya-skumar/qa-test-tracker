@@ -532,11 +532,13 @@ document.addEventListener('DOMContentLoaded', () => {
           if (userAvatarInitials) userAvatarInitials.textContent = name.charAt(0).toUpperCase();
         }
       } else {
-        if (btnLoginNav) btnLoginNav.style.display = 'inline-flex';
-        if (userProfileBadge) userProfileBadge.style.display = 'none';
+        // User is not logged in: redirect to login page immediately
+        window.location.href = '/login';
+        return;
       }
     } catch (err) {
       console.warn('Auth check failed:', err);
+      window.location.href = '/login';
     }
   }
 

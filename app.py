@@ -5,7 +5,7 @@ Provides RESTful endpoints for test case management, defect tracking, and KPI me
 
 import os
 import time
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory, session, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db, init_db
 
@@ -31,10 +31,16 @@ def apply_security_headers(response):
 # --------------------------------------------------------------------------
 @app.route('/')
 def serve_index():
+    # Only authenticated users who clicked login can access the dashboard
+    if not session.get('user_id'):
+        return redirect('/login')
     return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/login')
 def serve_login():
+    # If already logged in, go straight to dashboard
+    if session.get('user_id'):
+        return redirect('/')
     return send_from_directory(app.static_folder, 'login.html')
 
 # --------------------------------------------------------------------------
