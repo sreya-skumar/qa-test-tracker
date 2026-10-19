@@ -69,7 +69,22 @@ def health_check():
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    """Computes real-time QA metrics and test pass rates."""
+    """Computes real-time QA metrics and test pass rates scoped to the authenticated user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({
+            "total_test_cases": 0,
+            "passed": 0,
+            "failed": 0,
+            "blocked": 0,
+            "pending": 0,
+            "pass_rate_percent": 0,
+            "automation_rate_percent": 0,
+            "total_defects": 0,
+            "open_defects": 0,
+            "critical_defects": 0
+        }), 200
+
     conn = get_db()
     cursor = conn.cursor()
 
@@ -81,8 +96,9 @@ def get_stats():
         SUM(CASE WHEN status = 'Blocked' THEN 1 ELSE 0 END) AS blocked,
         SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
         SUM(CASE WHEN automated_by != 'Manual' THEN 1 ELSE 0 END) AS automated
-    FROM test_cases;
-    """)
+    FROM test_cases
+    WHERE user_id = ?;
+    """, (user_id,))
     test_metrics = dict(cursor.fetchone())
 
     cursor.execute("""
@@ -90,8 +106,9 @@ def get_stats():
         COUNT(*) AS total_defects,
         SUM(CASE WHEN status IN ('Open', 'In Progress') THEN 1 ELSE 0 END) AS open_defects,
         SUM(CASE WHEN severity = 'Critical' OR severity = 'Blocker' THEN 1 ELSE 0 END) AS critical_defects
-    FROM defects;
-    """)
+    FROM defects
+    WHERE user_id = ?;
+    """, (user_id,))
     defect_metrics = dict(cursor.fetchone())
 
     conn.close()
@@ -231,13 +248,17 @@ def logout():
 # --------------------------------------------------------------------------
 @app.route('/api/testcases', methods=['GET'])
 def list_test_cases():
-    """Lists test cases with optional filters for status, module, and priority."""
+    """Lists test cases scoped to current user with optional filters for status, module, and priority."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"count": 0, "test_cases": []}), 200
+
     status_filter = request.args.get('status')
     module_filter = request.args.get('module')
     priority_filter = request.args.get('priority')
 
-    query = "SELECT * FROM test_cases WHERE 1=1"
-    params = []
+    query = "SELECT * FROM test_cases WHERE user_id = ?"
+    params = [user_id]
 
     if status_filter:
         query += " AND status = ?"
@@ -261,7 +282,11 @@ def list_test_cases():
 
 @app.route('/api/testcases', methods=['POST'])
 def create_test_case():
-    """Creates a new test case with input validation."""
+    """Creates a new test case for the authenticated user with input validation."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required. Please log in."}), 401
+
     data = request.get_json() or {}
 
     title = (data.get('title') or '').strip()
@@ -284,13 +309,13 @@ def create_test_case():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-    INSERT INTO test_cases (title, description, module, priority, status, automated_by)
-    VALUES (?, ?, ?, ?, ?, ?);
-    """, (title, description, module, priority, status, automated_by))
+    INSERT INTO test_cases (user_id, title, description, module, priority, status, automated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?);
+    """, (user_id, title, description, module, priority, status, automated_by))
     new_id = cursor.lastrowid
     conn.commit()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (new_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (new_id, user_id))
     new_test = dict(cursor.fetchone())
     conn.close()
 
@@ -298,11 +323,15 @@ def create_test_case():
 
 @app.route('/api/testcases/<int:case_id>', methods=['GET'])
 def get_test_case(case_id):
-    """Retrieves a single test case along with any linked defects."""
+    """Retrieves a single test case along with any linked defects for the user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     test_row = cursor.fetchone()
     if not test_row:
         conn.close()
@@ -310,7 +339,7 @@ def get_test_case(case_id):
 
     test_data = dict(test_row)
 
-    cursor.execute("SELECT * FROM defects WHERE test_case_id = ? ORDER BY id DESC", (case_id,))
+    cursor.execute("SELECT * FROM defects WHERE test_case_id = ? AND user_id = ? ORDER BY id DESC", (case_id, user_id))
     defects = [dict(r) for r in cursor.fetchall()]
     test_data['defects'] = defects
 
@@ -319,13 +348,17 @@ def get_test_case(case_id):
 
 @app.route('/api/testcases/<int:case_id>', methods=['PUT'])
 def update_test_case(case_id):
-    """Updates test case fields."""
+    """Updates test case fields for the authenticated user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     data = request.get_json() or {}
 
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     existing = cursor.fetchone()
     if not existing:
         conn.close()
@@ -341,11 +374,11 @@ def update_test_case(case_id):
     cursor.execute("""
     UPDATE test_cases
     SET title = ?, description = ?, module = ?, priority = ?, status = ?, automated_by = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?;
-    """, (title, description, module, priority, status, automated_by, case_id))
+    WHERE id = ? AND user_id = ?;
+    """, (title, description, module, priority, status, automated_by, case_id, user_id))
     conn.commit()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     updated_test = dict(cursor.fetchone())
     conn.close()
 
@@ -354,6 +387,10 @@ def update_test_case(case_id):
 @app.route('/api/testcases/<int:case_id>/status', methods=['POST'])
 def update_test_status(case_id):
     """Quickly toggles/updates test execution status and execution time."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     data = request.get_json() or {}
     new_status = data.get('status')
     execution_time = data.get('execution_time_ms', 0)
@@ -364,7 +401,7 @@ def update_test_status(case_id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     if not cursor.fetchone():
         conn.close()
         return jsonify({"error": f"Test case #{case_id} not found"}), 404
@@ -372,11 +409,11 @@ def update_test_status(case_id):
     cursor.execute("""
     UPDATE test_cases
     SET status = ?, execution_time_ms = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?;
-    """, (new_status, execution_time, case_id))
+    WHERE id = ? AND user_id = ?;
+    """, (new_status, execution_time, case_id, user_id))
     conn.commit()
 
-    cursor.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT * FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     updated = dict(cursor.fetchone())
     conn.close()
 
@@ -385,15 +422,19 @@ def update_test_status(case_id):
 @app.route('/api/testcases/<int:case_id>', methods=['DELETE'])
 def delete_test_case(case_id):
     """Deletes a test case."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("SELECT id FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     if not cursor.fetchone():
         conn.close()
         return jsonify({"error": f"Test case #{case_id} not found"}), 404
 
-    cursor.execute("DELETE FROM test_cases WHERE id = ?", (case_id,))
+    cursor.execute("DELETE FROM test_cases WHERE id = ? AND user_id = ?", (case_id, user_id))
     conn.commit()
     conn.close()
 
@@ -404,7 +445,11 @@ def delete_test_case(case_id):
 # --------------------------------------------------------------------------
 @app.route('/api/defects', methods=['GET'])
 def list_defects():
-    """Lists defects joined with their test case title."""
+    """Lists defects joined with their test case title for the authenticated user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"count": 0, "defects": []}), 200
+
     status_filter = request.args.get('status')
     severity_filter = request.args.get('severity')
 
@@ -412,9 +457,9 @@ def list_defects():
     SELECT d.*, t.title AS test_case_title, t.module AS test_case_module
     FROM defects d
     LEFT JOIN test_cases t ON d.test_case_id = t.id
-    WHERE 1=1
+    WHERE d.user_id = ?
     """
-    params = []
+    params = [user_id]
 
     if status_filter:
         query += " AND d.status = ?"
@@ -435,7 +480,11 @@ def list_defects():
 
 @app.route('/api/defects', methods=['POST'])
 def create_defect():
-    """Logs a new defect/bug."""
+    """Logs a new defect/bug for the authenticated user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required. Please log in."}), 401
+
     data = request.get_json() or {}
 
     title = (data.get('title') or '').strip()
@@ -453,14 +502,21 @@ def create_defect():
 
     conn = get_db()
     cursor = conn.cursor()
+
+    # If test_case_id provided, ensure it belongs to this user
+    if test_case_id:
+        cursor.execute("SELECT id FROM test_cases WHERE id = ? AND user_id = ?", (test_case_id, user_id))
+        if not cursor.fetchone():
+            test_case_id = None
+
     cursor.execute("""
-    INSERT INTO defects (test_case_id, title, severity, status, steps_to_reproduce)
-    VALUES (?, ?, ?, ?, ?);
-    """, (test_case_id, title, severity, status, steps))
+    INSERT INTO defects (user_id, test_case_id, title, severity, status, steps_to_reproduce)
+    VALUES (?, ?, ?, ?, ?, ?);
+    """, (user_id, test_case_id, title, severity, status, steps))
     new_id = cursor.lastrowid
     conn.commit()
 
-    cursor.execute("SELECT * FROM defects WHERE id = ?", (new_id,))
+    cursor.execute("SELECT * FROM defects WHERE id = ? AND user_id = ?", (new_id, user_id))
     new_defect = dict(cursor.fetchone())
     conn.close()
 
@@ -468,13 +524,17 @@ def create_defect():
 
 @app.route('/api/defects/<int:defect_id>', methods=['PUT'])
 def update_defect(defect_id):
-    """Updates defect status or severity."""
+    """Updates defect status or severity for authenticated user."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     data = request.get_json() or {}
 
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM defects WHERE id = ?", (defect_id,))
+    cursor.execute("SELECT * FROM defects WHERE id = ? AND user_id = ?", (defect_id, user_id))
     existing = cursor.fetchone()
     if not existing:
         conn.close()
@@ -488,11 +548,11 @@ def update_defect(defect_id):
     cursor.execute("""
     UPDATE defects
     SET title = ?, severity = ?, status = ?, steps_to_reproduce = ?
-    WHERE id = ?;
-    """, (title, severity, status, steps, defect_id))
+    WHERE id = ? AND user_id = ?;
+    """, (title, severity, status, steps, defect_id, user_id))
     conn.commit()
 
-    cursor.execute("SELECT * FROM defects WHERE id = ?", (defect_id,))
+    cursor.execute("SELECT * FROM defects WHERE id = ? AND user_id = ?", (defect_id, user_id))
     updated = dict(cursor.fetchone())
     conn.close()
 
@@ -501,15 +561,19 @@ def update_defect(defect_id):
 @app.route('/api/defects/<int:defect_id>', methods=['DELETE'])
 def delete_defect(defect_id):
     """Deletes a defect."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM defects WHERE id = ?", (defect_id,))
+    cursor.execute("SELECT id FROM defects WHERE id = ? AND user_id = ?", (defect_id, user_id))
     if not cursor.fetchone():
         conn.close()
         return jsonify({"error": f"Defect #{defect_id} not found"}), 404
 
-    cursor.execute("DELETE FROM defects WHERE id = ?", (defect_id,))
+    cursor.execute("DELETE FROM defects WHERE id = ? AND user_id = ?", (defect_id, user_id))
     conn.commit()
     conn.close()
 
