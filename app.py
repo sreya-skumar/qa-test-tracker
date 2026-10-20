@@ -580,11 +580,13 @@ def delete_defect(defect_id):
     return jsonify({"message": f"Defect #{defect_id} deleted successfully"}), 200
 
 # --------------------------------------------------------------------------
-# Main Entry Point
+# Main Entry Point & Production Startup
 # --------------------------------------------------------------------------
+# Initialize SQLite database and seed initial demo records if needed
+init_db()
+
 if __name__ == '__main__':
-    # Initialize SQLite database and seed initial test records
-    init_db()
     port = int(os.environ.get('PORT', 5050))
     print(f"\n🚀 QA Test & Defect Tracker Backend starting on http://localhost:{port}\n")
     app.run(host='0.0.0.0', port=port, debug=True)
+
